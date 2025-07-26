@@ -1,6 +1,9 @@
 import torch
 import triton
 import triton.language as tl
+from slime.backends.megatron_utils.megatron_to_hf import quantize_param
+
+import time
 
 
 @triton.jit
@@ -42,7 +45,6 @@ def quantize_block_kernel(
 def quantize_param_triton(name, weight, weight_block_size):
     """Triton-based quantize_param function with same interface as PyTorch version"""
     assert name.endswith(".weight"), f"Expected weight parameter, got {name}"
-    assert weight_block_size is not None, "Triton kernel only supports per-block quantization"
 
     n, k = weight.shape
     block_n, block_k = weight_block_size
@@ -68,11 +70,6 @@ def quantize_param_triton(name, weight, weight_block_size):
 
 
 def benchmark_performance():
-    import sys
-    import os
-
-    sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-    from slime.backends.megatron_utils.megatron_to_hf import quantize_param
 
     weight_shape = (18432, 7168)
     block_size = (128, 128)
@@ -90,13 +87,11 @@ def benchmark_performance():
     for _ in range(5):
         quantize_param(name, weight, block_size)
 
-    import time
-
     start = time.perf_counter()
-    for _ in range(100):
+    for _ in range(512):
         quantize_param(name, weight, block_size)
     end = time.perf_counter()
-    pytorch_time = (end - start) * 1000 / 100
+    pytorch_time = (end - start) * 1000 / 512
     print(f"PyTorch: {pytorch_time:.2f} ms")
 
     # Triton benchmark
@@ -104,10 +99,10 @@ def benchmark_performance():
         quantize_param_triton(name, weight, block_size)
 
     start = time.perf_counter()
-    for _ in range(100):
+    for _ in range(512):
         quantize_param_triton(name, weight, block_size)
     end = time.perf_counter()
-    triton_time = (end - start) * 1000 / 100
+    triton_time = (end - start) * 1000 / 512
     print(f"Triton:  {triton_time:.2f} ms")
 
     if triton_time > 0:
@@ -117,11 +112,6 @@ def benchmark_performance():
 
 
 def check_accuracy():
-    import sys
-    import os
-
-    sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-    from slime.backends.megatron_utils.megatron_to_hf import quantize_param
 
     weight_shape = (512, 512)
     block_size = (128, 128)
