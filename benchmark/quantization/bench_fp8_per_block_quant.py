@@ -7,7 +7,7 @@ import time
 
 
 @triton.jit
-def quantize_block_kernel(
+def per_block_fp8_quant_kernel(
     weight_ptr,
     qweight_ptr,
     scale_ptr,
@@ -42,7 +42,7 @@ def quantize_block_kernel(
     tl.store(qweight_ptr + offs_n[:, None] * k + offs_k[None, :], qweight, mask=mask)
 
 
-def quantize_param_triton(name, weight, weight_block_size):
+def per_block_fp8_quant_triton(name, weight, weight_block_size):
     """Triton-based quantize_param function with same interface as PyTorch version"""
     assert name.endswith(".weight"), f"Expected weight parameter, got {name}"
 
@@ -60,7 +60,7 @@ def quantize_param_triton(name, weight, weight_block_size):
     FP8_MIN = float(torch.finfo(torch.float8_e4m3fn).min)
     FP8_MAX = float(torch.finfo(torch.float8_e4m3fn).max)
 
-    quantize_block_kernel[grid](
+    per_block_fp8_quant_kernel[grid](
         weight, qweight, scales, n_tiles_n, n_tiles_k, n, k, block_n, block_k, FP8_MIN, FP8_MAX
     )
 
@@ -96,11 +96,11 @@ def benchmark_performance():
 
     # Triton benchmark
     for _ in range(5):
-        quantize_param_triton(name, weight, block_size)
+        per_block_fp8_quant_triton(name, weight, block_size)
 
     start = time.perf_counter()
     for _ in range(512):
-        quantize_param_triton(name, weight, block_size)
+        per_block_fp8_quant_triton(name, weight, block_size)
     end = time.perf_counter()
     triton_time = (end - start) * 1000 / 512
     print(f"Triton:  {triton_time:.2f} ms")
@@ -130,7 +130,7 @@ def check_accuracy():
     pytorch_scale = pytorch_result[1][1]
 
     # Triton result
-    triton_result = quantize_param_triton(name, weight, block_size)
+    triton_result = per_block_fp8_quant_triton(name, weight, block_size)
     triton_qweight = triton_result[0][1]
     triton_scale = triton_result[1][1]
 
