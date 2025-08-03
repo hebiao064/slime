@@ -106,7 +106,7 @@ OPTIMIZER_ARGS=(
 WANDB_ARGS=(
    --use-wandb
    --wandb-project slime-dev
-   --wandb-group qwen3-30B-A3B-BF16-TP4-WITHOUT-EPMOE
+   --wandb-group qwen3-30B-A3B-BF16-EP4-TP4_EPMOE-ASYNC
    --wandb-key c7d02226907c7963c17d4b4d9e1749d5fe38e802
 )
 
@@ -114,8 +114,8 @@ SGLANG_ARGS=(
    --rollout-num-gpus-per-engine 4
    --sglang-mem-fraction-static 0.5
    --sglang-cuda-graph-bs 1 2 4 8 $(seq 16 8 256)
-   # --sglang-enable-ep-moe
-   # --sglang-expert-parallel-size 4
+   --sglang-enable-ep-moe
+   --sglang-expert-parallel-size 4
    # --debug-rollout-only
 )
 
