@@ -238,8 +238,31 @@ class UpdateWeightFromTensor:
         if rank == 0:
             ray.get([engine.reset_prefix_cache.remote() for engine in self.rollout_engines])
         dist.barrier(group=get_gloo_group())
+
+        if rank == 0:
+
+            import os
+            profile_dir = "/workspace/slime/profile"
+            os.makedirs(profile_dir, exist_ok=True)
+
+            prof = torch.profiler.profile(
+                activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+                schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
+                on_trace_ready=torch.profiler.tensorboard_trace_handler(os.path.join(profile_dir)),
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=True,
+            )
+            prof.start()
+
         for param_infos in tqdm(self.param_info_buckets, disable=rank != 0, desc="Update weights"):
             self._update_bucket_weights_from_tensor(param_infos)
+            if rank == 0:   
+                prof.step()
+
+        if rank == 0:
+            prof.stop()
+            print("Profiler stopped")
 
     def _update_bucket_weights_from_tensor(self, param_infos):
         pp_size = mpu.get_pipeline_model_parallel_world_size()

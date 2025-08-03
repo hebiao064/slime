@@ -27,8 +27,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 source "${SCRIPT_DIR}/models/qwen3-30B-A3B.sh"
 
 CKPT_ARGS=(
+   # --hf-checkpoint /root/Qwen3-30B-A3B
    --hf-checkpoint /root/Qwen3-30B-A3B
-   #--hf-checkpoint /root/Qwen3-30B-A3B-FP8
    --ref-load /root/Qwen3-30B-A3B_torch_dist
    --load /root/Qwen3-4B_slime/
    --save /root/Qwen3-4B_slime/
@@ -41,21 +41,23 @@ ROLLOUT_ARGS=(
    --label-key label
    --apply-chat-template
    --rollout-shuffle
+
    --rm-type deepscaler
-   --num-rollout 3000
-   --rollout-batch-size 32
+
+   --num-rollout 100
+   --rollout-batch-size 8
    --n-samples-per-prompt 8
    --rollout-max-response-len 8192
    --rollout-temperature 0.8
 
-   --global-batch-size 256
+   --global-batch-size 64
    --balance-data
 )
 
 EVAL_ARGS=(
    --eval-interval 20
    --eval-prompt-data aime /root/aime-2024/aime-2024.jsonl
-   --n-samples-per-eval-prompt 16
+   --n-samples-per-eval-prompt 1
    --eval-max-response-len 16384
    --eval-top-p 0.7
 )
@@ -82,6 +84,7 @@ GRPO_ARGS=(
    --use-kl-loss
    --kl-loss-coef 0.00
    --kl-loss-type low_var_kl
+   --kl-coef 0.00
    --entropy-coef 0.00
    --eps-clip 0.2
    --eps-clip-high 0.28
@@ -101,16 +104,19 @@ OPTIMIZER_ARGS=(
 )
 
 WANDB_ARGS=(
-   #--use-wandb
-   # --wandb-project slime-dev
-   # --wandb-group qwen3-30B-A3B-test
-   # --wandb-key ${WANDB_KEY}
+   --use-wandb
+   --wandb-project slime-dev
+   --wandb-group qwen3-30B-A3B-BF16-TP4-WITHOUT-EPMOE
+   --wandb-key c7d02226907c7963c17d4b4d9e1749d5fe38e802
 )
 
 SGLANG_ARGS=(
-   --rollout-num-gpus-per-engine 8
+   --rollout-num-gpus-per-engine 4
    --sglang-mem-fraction-static 0.5
    --sglang-cuda-graph-bs 1 2 4 8 $(seq 16 8 256)
+   # --sglang-enable-ep-moe
+   # --sglang-expert-parallel-size 4
+   # --debug-rollout-only
 )
 
 MISC_ARGS=(
