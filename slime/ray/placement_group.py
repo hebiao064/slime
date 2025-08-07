@@ -89,8 +89,6 @@ def create_placement_groups(args):
     pg, actor_pg_reordered_bundle_indices = _create_placement_group(num_gpus)
 
     rollout_pg_reordered_bundle_indices = actor_pg_reordered_bundle_indices[rollout_offset:]
-    print(f"rollout_pg_reordered_bundle_indices: {rollout_pg_reordered_bundle_indices}")
-    print(f"actor_pg_reordered_bundle_indices: {actor_pg_reordered_bundle_indices}")
     return {
         "actor": (pg, actor_pg_reordered_bundle_indices),
         "rollout": (pg, rollout_pg_reordered_bundle_indices),

@@ -404,7 +404,6 @@ class UpdateWeightFromTensor:
         flattened_tensor_bucket = FlattenedTensorBucket(named_tensors=converted_named_tensors)
         metadata = flattened_tensor_bucket.get_metadata()
 
-        # 只序列化必要的张量数据和元数据，避免序列化整个FlattenedTensorBucket对象
         flattened_tensor_data = {
             "flattened_tensor": flattened_tensor_bucket.get_flattened_tensor(),
             "metadata": metadata,

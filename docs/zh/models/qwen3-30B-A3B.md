@@ -15,8 +15,8 @@ source scripts/models/qwen3-30B-A3B.sh
 PYTHONPATH=/root/Megatron-LM/ torchrun --nproc-per-node 8 \
    tools/convert_hf_to_torch_dist.py \
    ${MODEL_ARGS[@]} \
-   --hf-checkpoint /root/Qwen3-30B-A3B-FP8/ \
-   --save /root/Qwen3-30B-A3B-FP8_torch_dist/
+   --hf-checkpoint /root/Qwen3-30B-A3B/ \
+   --save /root/Qwen3-30B-A3B_torch_dist/
 ```
 
 ## 执行训练
