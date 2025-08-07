@@ -110,7 +110,7 @@ WANDB_ARGS=(
    --use-wandb
    --wandb-project slime-dev
    --wandb-group qwen3-30B-A3B-BF16-EP8-TP8_EPMOE-ASYNC
-   --wandb-key c7d02226907c7963c17d4b4d9e1749d5fe38e802
+   --wandb-key ${WANDB_API_KEY}
 )
 
 SGLANG_ARGS=(
