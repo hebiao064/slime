@@ -3,6 +3,8 @@ import socket
 import time
 from tqdm import tqdm
 from sglang.srt.utils import MultiprocessingSerializer
+from sglang.srt.model_executor.model_runner import FlattenedTensorBucket
+
 
 import ray
 import torch
@@ -47,20 +49,20 @@ def all_gather_param(name, param):
     return param
 
 
-def all_gather_params_async(param_infos_and_params):
+def all_gather_params_async(param_infos_and_params: tuple[ParamInfo, torch.Tensor]) -> list[torch.Tensor]:
     """
     Perform async all_gather for a batch of parameters to improve performance.
-    
+
     Args:
         param_infos_and_params: List of (param_info, param) tuples
-        
+
     Returns:
         List of gathered parameters in the same order
     """
     # Phase 1: Start all async all_gather operations
     gather_tasks = []
     handles = []
-    
+
     for info, param in param_infos_and_params:
         # Prepare async all_gather
         if "expert_bias" in info.name:
@@ -77,18 +79,18 @@ def all_gather_params_async(param_infos_and_params):
             else:
                 tp_size = mpu.get_tensor_model_parallel_world_size()
                 tp_group = mpu.get_tensor_model_parallel_group()
-            
+
             param_partitions = [torch.empty_like(param.data) for _ in range(tp_size)]
             handle = dist.all_gather(param_partitions, param.data, group=tp_group, async_op=True)
             gather_tasks.append((info, None, handle, param_partitions, param.partition_dim))
             handles.append(handle)
-    
+
     # Phase 2: Wait for ALL async operations to complete at once
     # This ensures maximum parallelism by not blocking on individual operations
     for handle in handles:
         if handle is not None:
             handle.wait()
-    
+
     # Phase 3: Process all results after all communications are done
     gathered_params = []
     for info, direct_param, handle, param_partitions, partition_dim in gather_tasks:
@@ -108,9 +110,9 @@ def all_gather_params_async(param_infos_and_params):
                 if partition_dim == 0:
                     partition_dim = 1
             param = torch.cat(param_partitions, dim=partition_dim)
-        
+
         gathered_params.append(param)
-    
+
     return gathered_params
 
 
@@ -306,15 +308,17 @@ class UpdateWeightFromTensor:
             ray.get([engine.reset_prefix_cache.remote() for engine in self.rollout_engines])
         dist.barrier(group=get_gloo_group())
 
-        if rank == 0:
+        PROFILING = False
+        if rank == 0 and PROFILING:
 
             import os
-            profile_dir = "/workspace/slime/profile"
+
+            profile_dir = "/workspace/slime/profile/slime/"
             os.makedirs(profile_dir, exist_ok=True)
 
             prof = torch.profiler.profile(
                 activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
-                schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
+                schedule=torch.profiler.schedule(wait=0, warmup=1, active=1, repeat=1),
                 on_trace_ready=torch.profiler.tensorboard_trace_handler(os.path.join(profile_dir)),
                 record_shapes=True,
                 profile_memory=True,
@@ -324,12 +328,12 @@ class UpdateWeightFromTensor:
 
         for param_infos in tqdm(self.param_info_buckets, disable=rank != 0, desc="Update weights"):
             self._update_bucket_weights_from_tensor(param_infos)
-            if rank == 0:   
+            if rank == 0 and PROFILING:
                 prof.step()
 
-        if rank == 0:
+        if rank == 0 and PROFILING:
             prof.stop()
-            print("Profiler stopped")
+            print("profiler stopped")
 
     def _update_bucket_weights_from_tensor(self, param_infos):
         pp_size = mpu.get_pipeline_model_parallel_world_size()
@@ -383,34 +387,44 @@ class UpdateWeightFromTensor:
         for info, param in zip(param_infos, params):
             for key, value in info.attrs.items():
                 setattr(param, key, value)
-        
+
         # Batch async all_gather for all parameters
-        gathered_params = all_gather_params_async(list(zip(param_infos, params)))
-        
+        gathered_params: list[torch.Tensor] = all_gather_params_async(list(zip(param_infos, params)))
+
         # Process gathered params
         converted_named_tensors = []
         for info, param in zip(param_infos, gathered_params):
-            param = remove_padding(info.name, param, self.vocab_size)
+            param: torch.Tensor = remove_padding(info.name, param, self.vocab_size)
             converted_named_tensors.extend(
                 convert_to_hf(self.args, self.model_name, info.name, param, self.quantization_config)
             )
         self._update_converted_params_from_tensor(converted_named_tensors)
 
-    def _update_converted_params_from_tensor(self, converted_named_tensors):
-        ipc_handle = MultiprocessingSerializer.serialize(converted_named_tensors, output_str=True)
-        ipc_handles = (
+    def _update_converted_params_from_tensor(self, converted_named_tensors: list[tuple[str, torch.Tensor]]):
+        flattened_tensor_bucket = FlattenedTensorBucket(named_tensors=converted_named_tensors)
+        metadata = flattened_tensor_bucket.get_metadata()
+
+        # 只序列化必要的张量数据和元数据，避免序列化整个FlattenedTensorBucket对象
+        flattened_tensor_data = {
+            "flattened_tensor": flattened_tensor_bucket.get_flattened_tensor(),
+            "metadata": metadata,
+        }
+        serialized_flattened = MultiprocessingSerializer.serialize(flattened_tensor_data, output_str=True)
+
+        gathered_serialized_data = (
             [None] * dist.get_world_size(self._ipc_gather_group) if self._ipc_gather_src == dist.get_rank() else None
         )
         dist.gather_object(
-            ipc_handle,
-            object_gather_list=ipc_handles,
+            serialized_flattened,
+            object_gather_list=gathered_serialized_data,
             dst=self._ipc_gather_src,
             group=self._ipc_gather_group,
         )
 
         if dist.get_rank() == self._ipc_gather_src:
+            # if we don't use LocalSerializedTensor, then we don't need to replicate 8 times
             ref = self._ipc_engine.update_weights_from_tensor.remote(
-                ipc_handles=ipc_handles,
+                ipc_handles=gathered_serialized_data, load_format="flattened_bucket"
             )
             ray.get(ref)
 

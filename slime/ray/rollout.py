@@ -40,8 +40,8 @@ class RolloutRayActor(RayActor):
     def update_weights_from_distributed(self, names, dtypes, shapes, group_name):
         return self.infer_engine.update_weights_from_distributed(names, dtypes, shapes, group_name)
 
-    def update_weights_from_tensor(self, ipc_handles):
-        return self.infer_engine.update_weights_from_tensor(ipc_handles)
+    def update_weights_from_tensor(self, ipc_handles, load_format=None, flush_cache=False):
+        return self.infer_engine.update_weights_from_tensor(ipc_handles, load_format, flush_cache)
 
     def reset_prefix_cache(self):
         self.infer_engine.reset_prefix_cache()

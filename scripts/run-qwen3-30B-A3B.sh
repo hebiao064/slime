@@ -15,6 +15,9 @@ set -ex
 # will prevent ray from buffering stdout/stderr
 export PYTHONBUFFERED=16
 
+# clean up the profile directory
+rm -rf /workspace/slime/profile/*
+
 NVLINK_COUNT=$(nvidia-smi | grep -o "NVLink" | wc -l)
 if [ "$NVLINK_COUNT" -gt 0 ]; then
     HAS_NVLINK=1
@@ -46,11 +49,11 @@ ROLLOUT_ARGS=(
 
    --num-rollout 100
    --rollout-batch-size 8
-   --n-samples-per-prompt 8
-   --rollout-max-response-len 8192
+   --n-samples-per-prompt 1
+   --rollout-max-response-len 128
    --rollout-temperature 0.8
 
-   --global-batch-size 64
+   --global-batch-size 8
    --balance-data
 )
 
@@ -106,16 +109,16 @@ OPTIMIZER_ARGS=(
 WANDB_ARGS=(
    --use-wandb
    --wandb-project slime-dev
-   --wandb-group qwen3-30B-A3B-BF16-EP4-TP4_EPMOE-ASYNC
+   --wandb-group qwen3-30B-A3B-BF16-EP8-TP8_EPMOE-ASYNC
    --wandb-key c7d02226907c7963c17d4b4d9e1749d5fe38e802
 )
 
 SGLANG_ARGS=(
-   --rollout-num-gpus-per-engine 4
+   --rollout-num-gpus-per-engine 8
    --sglang-mem-fraction-static 0.5
    --sglang-cuda-graph-bs 1 2 4 8 $(seq 16 8 256)
    --sglang-enable-ep-moe
-   --sglang-expert-parallel-size 4
+   --sglang-expert-parallel-size 8
    # --debug-rollout-only
 )
 

@@ -80,8 +80,8 @@ class SglangEngine:
         self.llm.update_weights_from_distributed(names, dtypes, shapes, group_name)
         return
 
-    def update_weights_from_tensor(self, ipc_handles):
-        self.llm.update_weights_from_tensor(ipc_handles)
+    def update_weights_from_tensor(self, ipc_handles, load_format=None, flush_cache=False):
+        self.llm.update_weights_from_tensor(ipc_handles, load_format, flush_cache)
         return
 
     def reset_prefix_cache(self):
