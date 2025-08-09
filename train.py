@@ -71,9 +71,12 @@ def train(args):
 
         if args.offload:
             ray.get(actor_model.async_offload())
-            ray.get(rollout_manager.async_onload())
+            ray.get(rollout_manager.async_onload(tags=[GPU_MEMORY_TYPE_WEIGHTS]))
 
         ray.get(actor_model.async_update_weights())
+
+        if args.offload:
+            ray.get(rollout_manager.async_onload(tags=[GPU_MEMORY_TYPE_KV_CACHE]))
 
         if args.eval_interval is not None and (
             (rollout_id + 1) % args.eval_interval == 0
