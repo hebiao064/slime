@@ -1,6 +1,7 @@
 import multiprocessing
 import random
 import time
+from typing import List
 
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -49,8 +50,8 @@ class RolloutRayActor(RayActor):
     def sleep(self, level=1):
         self.infer_engine.sleep(level=level)
 
-    def wake_up(self):
-        self.infer_engine.wake_up()
+    def wake_up(self, tags: List[str] = None):
+        self.infer_engine.wake_up(tags=tags)
 
     def pause_generation(self):
         self.infer_engine.pause_generation()
@@ -204,6 +205,9 @@ class RolloutManager:
             num_gpus=0,
         ).remote()
 
+    def async_init(self):
+        return self.data_buffer.init.remote()
+
     def async_generate(self, rollout_id, evaluation=False):
         return self.data_buffer.generate.remote(rollout_id, evaluation=evaluation)
 
@@ -213,5 +217,5 @@ class RolloutManager:
     def async_offload(self):
         return [engine.sleep.remote() for engine in self.rollout_engines]
 
-    def async_onload(self):
-        return [engine.wake_up.remote() for engine in self.rollout_engines]
+    def async_onload(self, tags: List[str] = None):
+        return [engine.wake_up.remote(tags=tags) for engine in self.rollout_engines]

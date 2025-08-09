@@ -2,7 +2,7 @@ import dataclasses
 
 import os
 from typing import TYPE_CHECKING
-
+from typing import List
 from sglang.srt.server_args import ServerArgs
 from slime.utils.http_utils import get_host_info
 from .http_server_engine import HttpServerEngineAdapter
@@ -92,8 +92,8 @@ class SglangEngine:
         self.llm.flush_cache()
         self.llm.release_memory_occupation()
 
-    def wake_up(self):
-        self.llm.resume_memory_occupation()
+    def wake_up(self, tags: List[str] = None):
+        self.llm.resume_memory_occupation(tags=tags)
 
     def pause_generation(self):
         self.llm.pause_generation()
