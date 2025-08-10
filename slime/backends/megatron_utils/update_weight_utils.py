@@ -2,6 +2,7 @@ import re
 import socket
 import time
 from tqdm import tqdm
+from contextlib import nullcontext
 from sglang.srt.utils import MultiprocessingSerializer
 from sglang.srt.model_executor.model_runner import FlattenedTensorBucket
 
@@ -128,8 +129,14 @@ def named_parameters(args, model):
     if args.num_experts:
         expert_offset = ep_rank * args.num_experts // ep_size
 
-    for model_module in model:
-        layer_offset = get_transformer_layer_offset(model_module.config)
+    sig = inspect.signature(get_transformer_layer_offset)
+    need_vp_stage = "vp_stage" in sig.parameters
+
+    for vp_stage, model_module in enumerate(model):
+        if need_vp_stage:
+            layer_offset = get_transformer_layer_offset(model_module.config, vp_stage)
+        else:
+            layer_offset = get_transformer_layer_offset(model_module.config)
         for name, param in model_module.named_parameters():
             # for model without ddp wrap
             if not name.startswith("module.module."):
@@ -285,6 +292,13 @@ class UpdateWeightFromTensor:
         self.quantization_config = quantization_config
         self.param_info_buckets = get_param_info_buckets(self.args, self.model)
 
+        if self.args.experimental_offload:
+            import pytorch_malloc
+
+            self.allocator = torch.cuda.memory.CUDAPluggableAllocator(
+                pytorch_malloc.get_library_path(), "my_malloc", "my_free"
+            ).allocator()
+
     def connect_rollout_engines(self, rollout_engines, rollout_engine_lock):
         self.rollout_engines = rollout_engines
 
@@ -305,35 +319,18 @@ class UpdateWeightFromTensor:
     def update_weights(self):
         rank = dist.get_rank()
         if rank == 0:
-            ray.get([engine.reset_prefix_cache.remote() for engine in self.rollout_engines])
+            ray.get([engine.flush_cache.remote() for engine in self.rollout_engines])
         dist.barrier(group=get_gloo_group())
 
-        PROFILING = False
-        if rank == 0 and PROFILING:
+        if self.args.experimental_offload:
+            pool = torch.cuda.MemPool(self.allocator)
+        with torch.cuda.use_mem_pool(pool) if self.args.experimental_offload else nullcontext():
+            for param_infos in tqdm(self.param_info_buckets, disable=rank != 0, desc="Update weights"):
+                self._update_bucket_weights_from_tensor(param_infos)
 
-            import os
-
-            profile_dir = "/workspace/slime/profile/slime/"
-            os.makedirs(profile_dir, exist_ok=True)
-
-            prof = torch.profiler.profile(
-                activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
-                schedule=torch.profiler.schedule(wait=0, warmup=1, active=1, repeat=1),
-                on_trace_ready=torch.profiler.tensorboard_trace_handler(os.path.join(profile_dir)),
-                record_shapes=True,
-                profile_memory=True,
-                with_stack=True,
-            )
-            prof.start()
-
-        for param_infos in tqdm(self.param_info_buckets, disable=rank != 0, desc="Update weights"):
-            self._update_bucket_weights_from_tensor(param_infos)
-            if rank == 0 and PROFILING:
-                prof.step()
-
-        if rank == 0 and PROFILING:
-            prof.stop()
-            print("profiler stopped")
+        if self.args.experimental_offload:
+            # must manually delete here to release the memory
+            del pool
 
     def _update_bucket_weights_from_tensor(self, param_infos):
         pp_size = mpu.get_pipeline_model_parallel_world_size()
@@ -389,7 +386,7 @@ class UpdateWeightFromTensor:
                 setattr(param, key, value)
 
         # Batch async all_gather for all parameters
-        gathered_params: list[torch.Tensor] = all_gather_params_async(list(zip(param_infos, params)))
+        gathered_params = all_gather_params_async(list(zip(param_infos, params)))
 
         # Process gathered params
         converted_named_tensors = []
@@ -410,12 +407,12 @@ class UpdateWeightFromTensor:
         }
         serialized_flattened = MultiprocessingSerializer.serialize(flattened_tensor_data, output_str=True)
 
-        gathered_serialized_data = (
+        serialized_named_tensors = (
             [None] * dist.get_world_size(self._ipc_gather_group) if self._ipc_gather_src == dist.get_rank() else None
         )
         dist.gather_object(
             serialized_flattened,
-            object_gather_list=gathered_serialized_data,
+            object_gather_list=serialized_named_tensors,
             dst=self._ipc_gather_src,
             group=self._ipc_gather_group,
         )
@@ -423,7 +420,7 @@ class UpdateWeightFromTensor:
         if dist.get_rank() == self._ipc_gather_src:
             # if we don't use LocalSerializedTensor, then we don't need to replicate 8 times
             ref = self._ipc_engine.update_weights_from_tensor.remote(
-                ipc_handles=gathered_serialized_data, load_format="flattened_bucket"
+                serialized_named_tensors=serialized_named_tensors, load_format="flattened_bucket"
             )
             ray.get(ref)
 
@@ -458,7 +455,7 @@ class UpdateWeightFromDistributed:
             world_size = self.args.rollout_num_gpus + 1
 
             refs = [
-                engine.init_process_group.remote(
+                engine.init_weights_update_group.remote(
                     master_address,
                     master_port,
                     i * self.args.rollout_num_gpus_per_engine + 1,
@@ -480,7 +477,7 @@ class UpdateWeightFromDistributed:
     def update_weights(self):
         if dist.get_rank() == 0:
             ray.get([engine.pause_generation.remote() for engine in self.rollout_engines])
-            ray.get([engine.reset_prefix_cache.remote() for engine in self.rollout_engines])
+            ray.get([engine.flush_cache.remote() for engine in self.rollout_engines])
         dist.barrier(group=get_gloo_group())
 
         buffer_size = 0

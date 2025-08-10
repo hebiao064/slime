@@ -65,6 +65,14 @@ def get_slime_extra_args_provider(add_custom_arguments=None):
                     "This will always be true when --colocate is set."
                 ),
             )
+            parser.add_argument(
+                "--experimental-offload",
+                action="store_true",
+                default=False,
+                help=(
+                    "Enable a more aggressive offload strategy that uses pytorch_malloc to offload the CUDA memory. "
+                ),
+            )
 
             return parser
 
@@ -180,6 +188,16 @@ def get_slime_extra_args_provider(add_custom_arguments=None):
                 help=(
                     "The seed for the random number generator during rollout. "
                     "This is used to shuffle the prompts and also for the random sampling of the prompts."
+                ),
+            )
+            parser.add_argument(
+                "--use-token-output",
+                action="store_true",
+                default=False,
+                help=(
+                    "Use token-based output from SGLang instead of string-based output. "
+                    "This avoids encode/decode overhead and directly stores tokens, "
+                    "which is more efficient for training workflows."
                 ),
             )
 

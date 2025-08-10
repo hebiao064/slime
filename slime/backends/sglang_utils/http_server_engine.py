@@ -146,9 +146,7 @@ class HttpServerEngineAdapter:
         """
         return self._make_request(
             "resume_memory_occupation",
-            {
-                "tags": tags
-            },
+            {"tags": tags},
         )
 
     def init_weights_update_group(self, master_address, master_port, rank_offset, world_size, group_name, backend):
