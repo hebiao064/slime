@@ -70,7 +70,6 @@ def train(args):
                 ray.get(rollout_manager.data_buffer.save.remote(rollout_id))
 
         if args.offload:
-            ray.get(actor_model.async_offload())
             ray.get(rollout_manager.async_onload(tags=[GPU_MEMORY_TYPE_WEIGHTS]))
 
         ray.get(actor_model.async_update_weights())
