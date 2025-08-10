@@ -50,7 +50,7 @@ def all_gather_param(name, param):
     return param
 
 
-def all_gather_params_async(param_infos_and_params: tuple[ParamInfo, torch.Tensor]) -> list[torch.Tensor]:
+def all_gather_params_async(param_infos_and_params):
     """
     Perform async all_gather for a batch of parameters to improve performance.
 
@@ -391,7 +391,7 @@ class UpdateWeightFromTensor:
         # Process gathered params
         converted_named_tensors = []
         for info, param in zip(param_infos, gathered_params):
-            param: torch.Tensor = remove_padding(info.name, param, self.vocab_size)
+            param = remove_padding(info.name, param, self.vocab_size)
             converted_named_tensors.extend(
                 convert_to_hf(self.args, self.model_name, info.name, param, self.quantization_config)
             )

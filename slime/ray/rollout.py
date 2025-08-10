@@ -1,7 +1,6 @@
 import multiprocessing
 import random
 import time
-from typing import List
 
 import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -10,53 +9,7 @@ from slime.backends.sglang_utils.sglang_engine import SGLangEngine
 from slime.ray.buffer import Buffer
 from slime.utils.http_utils import find_available_port, get_host_info, run_router
 from .utils import Lock
-
-
-@ray.remote
-class RolloutRayActor(RayActor):
-    def __init__(self, args, rank: int):
-        self.args = args
-        self.rank = rank
-
-    def init(self, dist_init_addr, port, nccl_port):
-        # build infer engine
-        self.infer_engine = SglangEngine(
-            args=self.args,
-            rank=self.rank,
-            dist_init_addr=dist_init_addr,
-            port=port,
-            nccl_port=nccl_port,
-        )
-
-        if self.args.offload:
-            # offload the engine to the CPU
-            self.infer_engine.sleep()
-
-    def init_process_group(self, master_address, master_port, rank_offset, world_size, group_name, backend):
-        return self.infer_engine.init_process_group(
-            master_address, master_port, rank_offset, world_size, group_name, backend
-        )
-
-    def update_weights_from_distributed(self, names, dtypes, shapes, group_name):
-        return self.infer_engine.update_weights_from_distributed(names, dtypes, shapes, group_name)
-
-    def update_weights_from_tensor(self, ipc_handles, load_format=None, flush_cache=False):
-        return self.infer_engine.update_weights_from_tensor(ipc_handles, load_format, flush_cache)
-
-    def reset_prefix_cache(self):
-        self.infer_engine.reset_prefix_cache()
-
-    def sleep(self, level=1):
-        self.infer_engine.sleep(level=level)
-
-    def wake_up(self, tags: List[str] = None):
-        self.infer_engine.wake_up(tags=tags)
-
-    def pause_generation(self):
-        self.infer_engine.pause_generation()
-
-    def continue_generation(self):
-        self.infer_engine.continue_generation()
+from typing import List
 
 
 def create_rollout_engines(args, pg):
@@ -206,9 +159,6 @@ class RolloutManager:
             num_gpus=0,
         ).remote()
 
-    def async_init(self):
-        return self.data_buffer.init.remote()
-
     def async_generate(self, rollout_id, evaluation=False):
         return self.data_buffer.generate.remote(rollout_id, evaluation=evaluation)
 
@@ -216,4 +166,4 @@ class RolloutManager:
         return [engine.release_memory_occupation.remote() for engine in self.rollout_engines]
 
     def async_onload(self, tags: List[str] = None):
-        return [engine.wake_up.remote(tags=tags) for engine in self.rollout_engines]
+        return [engine.resume_memory_occupation.remote(tags=tags) for engine in self.rollout_engines]

@@ -38,11 +38,13 @@ def train(args):
     ray.get(actor_model.async_init_weight_update_connections(rollout_manager))
 
     if args.offload:
-        # no tags means wake up all tags
-        ray.get(rollout_manager.async_onload())
+        ray.get(rollout_manager.async_onload(tags=[GPU_MEMORY_TYPE_WEIGHTS]))
 
     # always update weight first so that sglang has the loaded weights from training.
     ray.get(actor_model.async_update_weights())
+
+    if args.offload:
+        ray.get(rollout_manager.async_onload(tags=[GPU_MEMORY_TYPE_KV_CACHE]))
 
     # train loop.
     # note that for async training, one can change the position of the sync operation(ray.get).
