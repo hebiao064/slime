@@ -166,9 +166,14 @@ class RolloutManager:
         return [engine.release_memory_occupation.remote() for engine in self.rollout_engines]
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     def async_onload(self, tags: List[str] = None):
         return [engine.resume_memory_occupation.remote(tags=tags) for engine in self.rollout_engines]
 =======
     def async_onload(self):
         return [engine.resume_memory_occupation.remote() for engine in self.rollout_engines]
 >>>>>>> 5067493 (Revert "[update weight] resume sglang in multi-stage (#150)" (#151))
+=======
+    def async_onload(self, tags: List[str] = None):
+        return [engine.resume_memory_occupation.remote(tags=tags) for engine in self.rollout_engines]
+>>>>>>> 24c2e93 (Support Multi-Stage Awake (#149))
