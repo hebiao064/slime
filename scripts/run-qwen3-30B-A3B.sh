@@ -35,7 +35,7 @@ CKPT_ARGS=(
    --ref-load /root/Qwen3-30B-A3B_torch_dist
    --load /root/Qwen3-4B_slime/
    --save /root/Qwen3-4B_slime/
-   --save-interval 20
+   --save-interval 100
 )
 
 ROLLOUT_ARGS=(
@@ -110,7 +110,7 @@ WANDB_ARGS=(
    --use-wandb
    --wandb-project slime-dev
    --wandb-group qwen3-30B-A3B-BF16-EP8-TP8_EPMOE-ASYNC
-   --wandb-key ${WANDB_API_KEY}
+   --wandb-key c7d02226907c7963c17d4b4d9e1749d5fe38e802
 )
 
 SGLANG_ARGS=(

@@ -2,15 +2,36 @@
 
 [中文版](../../zh/models/qwen3-30B-A3B.md)
 
-## Environment Preparation
+## Environment Setup
 
-The environment setup, model download, data, and checkpoint conversion are the same as for the Qwen3-4B model. You can refer to [Example: Qwen3-4B Model](./qwen3-4B.md), replacing mentions of Qwen3-4B with Qwen3-30B-A3B.
-
-To convert huggingface checkpoint to torch_dist, please try:
+After pulling the `zhuzilin/slime:latest` image, initialize the image environment as follows:
 
 ```bash
+cd /root/
+git clone https://github.com/THUDM/slime.git
 cd slime/
 pip install -e .
+```
+
+Download the model and data:
+
+```bash
+# hf checkpoint
+huggingface-cli download Qwen/Qwen3-30B-A3B --local-dir /root/Qwen3-30B-A3B
+
+# train data
+huggingface-cli download --repo-type dataset zhuzilin/dapo-math-17k \
+  --local-dir /root/dapo-math-17k
+
+# eval data
+huggingface-cli download --repo-type dataset zhuzilin/aime-2024 \
+  --local-dir /root/aime-2024
+```
+
+Convert the Hugging Face checkpoint into a format that Megatron can load:
+
+```bash
+cd /root/slime
 source scripts/models/qwen3-30B-A3B.sh
 PYTHONPATH=/root/Megatron-LM/ torchrun --nproc-per-node 8 \
    tools/convert_hf_to_torch_dist.py \
