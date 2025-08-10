@@ -38,7 +38,11 @@ def train(args):
     ray.get(actor_model.async_init_weight_update_connections(rollout_manager))
 
     if args.offload:
+<<<<<<< HEAD
         ray.get(rollout_manager.async_onload(tags=[GPU_MEMORY_TYPE_WEIGHTS]))
+=======
+        ray.get(rollout_manager.async_onload())
+>>>>>>> 5067493 (Revert "[update weight] resume sglang in multi-stage (#150)" (#151))
 
     # always update weight first so that sglang has the loaded weights from training.
     ray.get(actor_model.async_update_weights())
@@ -70,7 +74,12 @@ def train(args):
                 ray.get(rollout_manager.data_buffer.save.remote(rollout_id))
 
         if args.offload:
+<<<<<<< HEAD
             ray.get(rollout_manager.async_onload(tags=[GPU_MEMORY_TYPE_WEIGHTS]))
+=======
+            ray.get(actor_model.async_offload())
+            ray.get(rollout_manager.async_onload())
+>>>>>>> 5067493 (Revert "[update weight] resume sglang in multi-stage (#150)" (#151))
 
         ray.get(actor_model.async_update_weights())
 
