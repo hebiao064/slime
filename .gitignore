@@ -183,4 +183,4 @@ local/
 **/buffer_stats/
 *.out
 *.pkl
-slime/backends/megatron_utils/workspace.code-workspace
+*.code-workspace
